@@ -1,6 +1,36 @@
 import cv2
 import numpy as np
 from deepface import DeepFace
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+# Email configuration
+SMTP_SERVER = 'smtp.gmail.com'  # Replace with your SMTP server
+SMTP_PORT = 587
+SENDER_EMAIL = 'your_email@gmail.com'
+SENDER_PASSWORD = 'your_email_password'
+RECIPIENT_EMAIL = 'recipient_email@gmail.com'
+
+# Function to send email
+def send_email(subject, body):
+    msg = MIMEMultipart()
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = RECIPIENT_EMAIL
+    msg['Subject'] = subject
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        text = msg.as_string()
+        server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, text)
+        server.quit()
+        print(f"Email sent successfully to {RECIPIENT_EMAIL}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
 
 # Function to handle mouse events for drawing bounding boxes
 def draw_rectangle(event, x, y, flags, param):
@@ -158,7 +188,6 @@ while True:
             cv2.putText(frame, label, (x, y + 30), font, 1, (0, 255, 0), 2)
 
             # Extract the face from the frame
-            # Assuming the face is in the upper part of the person's bounding box
             face_y1 = y
             face_y2 = y + int(h / 2)
             face_x1 = x
@@ -172,24 +201,19 @@ while True:
             if emotion_response['emotion'] in ['angry', 'sad', 'fear', 'disgust'] and emotion_response['confidence'] > 0.75:
                 cv2.putText(frame, "Distress Detected!", (x, y - 10), font, 1, (0, 0, 255), 2)
                 print(f"Alert: {label} is in distress (Emotion: {emotion_response['emotion']}, Confidence: {emotion_response['confidence']:.2f})")
+                send_email("Distress Detected", f"{label} is in distress (Emotion: {emotion_response['emotion']}, Confidence: {emotion_response['confidence']:.2f})")
 
             # Check if person is too close to any preset bounding box
             for bbox in bounding_boxes_too_close:
                 box_coordinates = bbox["coordinates"]
-                # Check if any corner of the person's bounding box is within a certain distance from the nearest edge
                 corners = [(x, y), (x + w, y), (x, y + h), (x + w, y + h)]
 
                 for corner in corners:
                     corner_x, corner_y = corner
-
-                    # Calculate distance from the corner to the nearest edge of the preset bounding box
                     distance_to_edge_x = min(abs(corner_x - box_coordinates[0][0]), abs(corner_x - box_coordinates[1][0]))
                     distance_to_edge_y = min(abs(corner_y - box_coordinates[0][1]), abs(corner_y - box_coordinates[1][1]))
-
-                    # Set your threshold for closeness (adjust as needed)
                     closeness_threshold = 20  # Example threshold value, modify as needed
 
-                    # Check if the distance is less than the threshold or if the bounding boxes intersect
                     if (
                         distance_to_edge_x < closeness_threshold
                         or distance_to_edge_y < closeness_threshold
@@ -197,21 +221,24 @@ while True:
                     ):
                         cv2.putText(frame, "Too Close!", (x, y - 40), font, 1, (0, 0, 255), 2)
                         print(f"Alert: {label} is too close to the drawn zone")
+                        send_email("Proximity Alert", f"{label} is too close to the drawn zone.")
 
             # Check if person leaves any preset bounding box
             for bbox in bounding_boxes_left_zone:
                 box_coordinates = bbox["coordinates"]
-                # Check if the person's bounding box is entirely within the left zone
                 if not (x > box_coordinates[0][0] and y > box_coordinates[0][1] and (x + w) < box_coordinates[1][0] and (y + h) < box_coordinates[1][1]):
                     cv2.putText(frame, "Left Zone!", (x, y - 70), font, 1, (0, 0, 255), 2)
                     print(f"Alert: {label} left the drawn zone")
+                    send_email("Zone Departure Alert", f"{label} left the drawn zone.")
 
     if not person_found:
         cv2.putText(frame, "Alert: Person not found in the scene", (10, 30), font, 1, (0, 0, 255), 2)
         print("Alert: Person not found in the scene")
+        send_email("Person Not Found", "Alert: Person not found in the scene.")
     if dangerous_object_found:
         cv2.putText(frame, "Alert: Dangerous object in the scene", (10, 60), font, 1, (0, 0, 255), 2)
         print("Alert: Dangerous object in the scene")
+        send_email("Dangerous Object Alert", "Alert: Dangerous object in the scene.")
 
     cv2.imshow("Frame", frame)
 
